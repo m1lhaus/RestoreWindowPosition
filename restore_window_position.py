@@ -2,26 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import os
-import json
+import re
+import sys
+import argparse
+import time
+import msvcrt
+import threading
 import configparser
 from collections import defaultdict
 
 import win32api
 import win32gui
 import win32con
-import msvcrt
-import sys
-import time
-import threading
 import pywintypes
-import argparse
-import re
 import weakref
-import pickle
-
-# NAME = "Woofer"
-# LOWERCASE = True
-# REGEX = False
 
 
 def get_window_by_name(target_name, is_name_regex, lowercase_only, find_only_one):
@@ -94,6 +88,8 @@ def read_ini_parser(parser):
         config[section]["PosY0"] = parser.getint(section, "PosY0", fallback=-1)
         config[section]["PosY1"] = parser.getint(section, "PosY1", fallback=-1)
         config[section]["PosX1"] = parser.getint(section, "PosX1", fallback=-1)
+        config[section]["WindowActive"] = None
+        config[section]["Minimized"] = None
 
     return config
 
@@ -119,12 +115,14 @@ def find_all_windows(config):
         window = get_window_by_name(details["WindowTitle"], is_name_regex=details["UseRegEx"], lowercase_only=not details["CaseSensitive"], find_only_one=True)
         if window:
             win_hwnd = window[0]
-            cfg[window_record]["HWND"] = win_hwnd
-            cfg[window_record]["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
+            config[window_record]["HWND"] = win_hwnd
+            config[window_record]["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
+            config[window_record]["WindowActive"] = True
 
         else:
-            cfg[window_record]["HWND"] = None
-            cfg[window_record]["RealWindowTitle"] = None
+            config[window_record]["HWND"] = None
+            config[window_record]["RealWindowTitle"] = None
+            config[window_record]["WindowActive"] = False
 
     return config
 
@@ -141,30 +139,96 @@ def update_positions(config):
             except Exception:
                 pass        # might happen whatever
 
-            details["PosX0"] = x0
-            details["PosY0"] = y0
-            details["PosX1"] = x1
-            details["PosY1"] = y1
+            is_minimized = (x0 < 0) and (y0 < 0) and (x1 < 0) and (y1 < 0)
+            details["Minimized"] = is_minimized
+
+            if not is_minimized:
+                details["PosX0"] = x0
+                details["PosY0"] = y0
+                details["PosX1"] = x1
+                details["PosY1"] = y1
 
     return config
 
 
-if __name__ == '__main__':
+def print_summary(config):
+    for win_record, win_details in config.items():
+        if win_record == "DEFAULT":
+            continue
 
-    filepath = "config.ini"
-    cfg_parser = read_ini_file(filepath)
+        real_window_title = win_details["RealWindowTitle"] if win_details["RealWindowTitle"] else "N/A"
+        hwnd = win_details["HWND"] if win_details["HWND"] else "N/A"
+        is_window_active = win_details["WindowActive"]
+        is_minimized = win_details["Minimized"]
+        if win_details["WindowActive"] and not is_minimized:
+            position = "(%d, %d, %d, %d)" % (win_details["PosX0"], win_details["PosY0"], win_details["PosX1"], win_details["PosY1"])
+        else:
+            position = "N/A"
+
+        print("[%s]" % win_record)
+        print("RealWindowTitle =", real_window_title)
+        print("HWND =", hwnd)
+        print("WindowActive =", is_window_active)
+        print("Minimized =", is_minimized)
+        print("Position =", position)
+        print("")
+
+
+def thread_worker(config_sile, stop_event):
+    cfg_parser = read_ini_file(config_sile)
     cfg = read_ini_parser(cfg_parser)
-    refresh_rate = cfg["DEFAULT"]["RefreshRateInSec"]       # seconds
-    save_rate = cfg["DEFAULT"]["SaveRateInMin"]         # minutes
-    save_every = max(int(round((60 * save_rate) / refresh_rate)), 1)        # cycles
+    refresh_rate = cfg["DEFAULT"]["RefreshRateInSec"]  # seconds
+    save_rate = cfg["DEFAULT"]["SaveRateInMin"]  # minutes
+    save_every = max(int(round((60 * save_rate) / refresh_rate)), 1)  # cycles
 
-    for i in range(save_every):
-        cfg = find_all_windows(cfg)
-        cfg = update_positions(cfg)
+    print("Restore window position laucnhed")
 
-        print('\n'*20) # prints 80 line breaks
-        print(json.dumps(cfg, indent="  "))
-        time.sleep(refresh_rate)
+    while not stop_event.is_set():
 
-    write_ini_parser(cfg_parser, cfg)
-    write_ini_file(filepath, cfg_parser)
+        i = 0
+        while i < save_every and not stop_event.is_set():
+            i += 1
+            cfg = find_all_windows(cfg)
+            cfg = update_positions(cfg)
+
+            print("\n"*50)
+
+            print("Restore window position is running...")
+            print("")
+            print_summary(cfg)
+            print("")
+            print("Press 'q' key to exit")
+            print("--> ", end="")
+            sys.stdout.flush()
+
+            time.sleep(refresh_rate)
+
+        write_ini_parser(cfg_parser, cfg)
+        write_ini_file(config_sile, cfg_parser)
+
+    print("")
+    print("Restore window position closed")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument('-c', "--config", type=str, default="config.ini", help='')
+    args = parser.parse_args()
+
+    args.config = os.path.abspath(args.config)
+    if not os.path.join(args.config):
+        raise Exception("Config file '%s' was not found!" % args.config)
+
+    stop_event = threading.Event()
+    worker_thread = threading.Thread(name='worker_thread', target=thread_worker, args=(args.config, stop_event))
+
+    worker_thread.start()
+
+    try:
+        while True:
+            cin = msvcrt.getch()
+            if cin.strip() == b"q":
+                break
+    finally:
+        stop_event.set()
+        worker_thread.join()
