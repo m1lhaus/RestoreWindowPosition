@@ -93,7 +93,6 @@ def read_ini_parser(parser):
 
     config = defaultdict(dict)
 
-    config["DEFAULT"]["CaseInsensitive"] = parser.getboolean("DEFAULT", "CaseInsensitive", fallback=False)
     config["DEFAULT"]["RefreshRateInSec"] = parser.getfloat("DEFAULT", "RefreshRateInSec", fallback=1)
     config["DEFAULT"]["SaveRateInMin"] = parser.getfloat("DEFAULT", "SaveRateInMin", fallback=1)
 
@@ -122,6 +121,22 @@ def write_ini_parser(parser, config):
 
 def write_ini_file(filename, parser):
     with codecs.open(filename, "w", "utf8") as configfile:
+        text = ["; Using this config file you can add new windows to be tracked/saved/restored.\n"
+                "; The config file need to have DEFAULT section with following items:\n"
+                "; \t- RefreshRateInSec - how fast the script should check opened windows, their positions, etc. (default 1 sec)\n"
+                "; \t- SaveRateInMin - how often should be current window positions written to config file (default 1 min)\n"
+                "; \n"
+                "; New window to track:\n"
+                "; --------------------\n"
+                "; [any_name_of_the_record]\n"
+                "; windowtitle = name/title of the window or regular expression (string)\n"
+                "; useregex = whether or not should be windowtitle handled as regex (boolean)\n"
+                "; ontop = whether or not put everytime window on top (boolean)\n"
+                "; casesensitive = whether or not to ignore case in window title (boolean)\n"
+                "; ==================================================================================================================\n"
+                "\n"]
+
+        configfile.writelines(text)
         parser.write(configfile)
 
 
