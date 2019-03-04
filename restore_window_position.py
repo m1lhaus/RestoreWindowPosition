@@ -145,14 +145,16 @@ def find_all_windows(config):
         if window_record == "DEFAULT":
             continue
 
-        win_hwnd = get_window_by_name(details["WindowTitle"], is_name_regex=details["UseRegEx"], lowercase_only=not details["CaseSensitive"], find_only_one=True)
+        win_hwnd = get_window_by_name(details["WindowTitle"], is_name_regex=details["UseRegEx"],
+                                      lowercase_only=not details["CaseSensitive"], find_only_one=True)
         if win_hwnd:
             config[window_record]["HWND"] = win_hwnd
             config[window_record]["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
 
             # window is opened, restore its position
             if not config[window_record]["WindowActive"]:
-                restore_window_position(win_hwnd, config[window_record]["PosX0"], config[window_record]["PosY0"], config[window_record]["PosX1"], config[window_record]["PosY1"], config[window_record]["OnTop"])
+                restore_window_position(win_hwnd, config[window_record]["PosX0"], config[window_record]["PosY0"],
+                                        config[window_record]["PosX1"], config[window_record]["PosY1"], config[window_record]["OnTop"])
 
             config[window_record]["WindowActive"] = True
 
@@ -271,17 +273,17 @@ def restore_window_position_worker(config_sile, stop_event):
 
 
 if __name__ == '__main__':
-    arg_parser = argparse.ArgumentParser(description="")
-    arg_parser.add_argument('-c', "--config", type=str, default="config.ini", help='')
+    arg_parser = argparse.ArgumentParser(description="RestoreWindowPosition is simple script for Windows that can remember and restore window position")
+    arg_parser.add_argument('-c', "--config", type=str, default="config.ini", help='Path to config file')
     args = arg_parser.parse_args()
 
     args.config = os.path.abspath(args.config)
     if not os.path.join(args.config):
         raise Exception("Config file '%s' was not found!" % args.config)
 
+    # function is executed in own thread since main loop waits for q-key to be pressed
     stop_event = threading.Event()
     worker_thread = threading.Thread(name='worker_thread', target=restore_window_position_worker, args=(args.config, stop_event))
-
     worker_thread.start()
 
     try:
@@ -290,5 +292,5 @@ if __name__ == '__main__':
             if cin.strip() == b"q":
                 break
     finally:
-        stop_event.set()
+        stop_event.set()        # stops the thread
         worker_thread.join()
