@@ -140,12 +140,14 @@ def update_positions(config):
             continue
 
         win_hwnd = details["HWND"]
-        if win_hwnd is not None:
-            try:
-                x0, y0, x1, y1 = win32gui.GetWindowRect(win_hwnd)      # (left, top, right, bottom)
-            except Exception:
-                pass        # might happen whatever
+        if win_hwnd is None:
+            return config
 
+        try:
+            x0, y0, x1, y1 = win32gui.GetWindowRect(win_hwnd)      # (left, top, right, bottom)
+        except Exception:
+            pass        # might happen whatever
+        else:
             is_minimized = is_windows_minimized(x0, y0, x1, y1)
             details["Minimized"] = is_minimized
 
