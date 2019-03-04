@@ -216,11 +216,12 @@ def restore_window_position_worker(config_sile, stop_event):
 
         i = 0
         while i < save_every and not stop_event.is_set():
+            # print("\n"*50)
+            os.system("cls")
+
             i += 1
             cfg = find_all_windows(cfg)
             cfg = update_positions(cfg)
-
-            print("\n"*50)
 
             print("Restore window position is running...")
             print("")
