@@ -2,13 +2,15 @@
 
 RestoreWindowPosition is simple script for Windows that can remember and restore window position. The window is identified by its name or using regular expression. Both configuration and saved window position is saved to INI file.
 
+![](./docs/screenshot.PNG "RestoreWindowPosition screenshot")
+
 ## Motivation
 
 I got very frustrated by pop-up windows constantly opening on some default position. So it happened when using multi-monitor setup I wanted the window to open on exact monitor/position/size. For example that was the case with MS Visual Studio debug console. Using this script I can put the debug console on exact position on one of my 3 monitors.
 
 ## Features:
 
-- find desired window by its window title in opened windows
+- find desired window by its window title in opened windows (UTF8)
 - find current window position every `refreshrateinsec`
 - restore window last position if opened
 - put window on top if `ontop` (very limited)
