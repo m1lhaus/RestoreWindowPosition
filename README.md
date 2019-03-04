@@ -58,6 +58,5 @@ Later when TCMD window is opened, position is retrieved and saved to config file
 ## TODO
 
 - support child windows
-- add licence info
 - add comments
 - add helper comments to config ini
