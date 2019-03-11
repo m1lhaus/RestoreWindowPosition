@@ -19,7 +19,6 @@ I got very frustrated by pop-up windows constantly opening on some default posit
 
 ## Limitations
 
-- currently child windows (sub windows) are not supported
 - put window on top is limited by Microsoft decision to suppress this functionality
 - doesn't work for windows where the window title is changing (i.e. Spotify client shows current track name)
 
