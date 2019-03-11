@@ -25,47 +25,65 @@ import codecs
 import msvcrt
 import threading
 import configparser
+import traceback
 from collections import defaultdict
 
-import win32api
 import win32gui
 import win32con
 
 
-def get_window_by_name(target_name, is_name_regex, lowercase_only, find_only_one):
+# if True, all found window names are printed to console and window enumeration wont get interrupted
+DEBUG_MODE = False
+
+
+def get_window_by_name(target_name, is_name_regex, lowercase_only, is_child_window):
     # helper custom exception to stop pywin32 enumeration
     class StopEnumerateWindows(Exception):
         pass
 
+    def compare_window_title(target_wname, current_wname):
+        nonlocal is_name_regex, lowercase_only
+        if lowercase_only:
+            target_wname = target_wname.lower()
+            current_wname = current_wname.lower()
+        return (is_name_regex and re.match(target_wname, current_wname)) or (target_wname in current_wname)
+
+    def enum_child_windows_callback(i_hwnd, _):
+        nonlocal found_window_hwnd, target_name, is_name_regex, lowercase_only
+
+        child_wname = win32gui.GetWindowText(i_hwnd)
+        if DEBUG_MODE: print("Child:", child_wname)
+        if child_wname and compare_window_title(target_name, child_wname):
+            found_window_hwnd = i_hwnd
+            if not DEBUG_MODE: raise StopEnumerateWindows()
+
     def enum_windows_callback(i_hwnd, _):
-        nonlocal found_window_hwnd, target_name, is_name_regex, lowercase_only, find_only_one
+        nonlocal found_window_hwnd, target_name, is_name_regex, lowercase_only, is_child_window
 
         window_name = win32gui.GetWindowText(i_hwnd)
-        if not window_name:
-            return
+        if DEBUG_MODE: print("Top-level:", window_name)
+        if window_name and compare_window_title(target_name, window_name):
+            found_window_hwnd = i_hwnd
+            if not DEBUG_MODE: raise StopEnumerateWindows()
 
-        # print(window_name)
-
-        if lowercase_only:
-            target_name = target_name.lower()
-            window_name = window_name.lower()
-
-        if is_name_regex:
-            if re.match(target_name, window_name):
-                found_window_hwnd = i_hwnd
-                if find_only_one:
-                    raise StopEnumerateWindows()                # C-version returns true or false, pywin32 is kind-of broken here
-        else:
-            if target_name in window_name:
-                found_window_hwnd = i_hwnd
-                if find_only_one:
-                    raise StopEnumerateWindows()
+        if is_child_window:
+            try:
+                win32gui.EnumChildWindows(i_hwnd, enum_child_windows_callback, None)
+            except StopEnumerateWindows:        # this is enumeration stop flag => pass it to upper levels
+                raise
+            # might happen whatever, but KeyboardInterrupt won't get caught
+            except Exception:
+                pass        # usually lot of "access denied" errors might be triggered, so skip exception traceback print
 
     found_window_hwnd = 0
     try:
         win32gui.EnumWindows(enum_windows_callback, None)
     except StopEnumerateWindows:
-        pass
+        pass         # this is enumeration stop flag
+    # because exception might be cause by win32 api, script functionality might be still OK => continue
+    except Exception:
+        # print exception because there should be none
+        traceback.print_exc()
 
     return found_window_hwnd
 
@@ -100,6 +118,7 @@ def read_ini_parser(parser):
         config[section]["WindowTitle"] = remove_quotes(parser.get(section, "WindowTitle", fallback=""))
         config[section]["UseRegEx"] = parser.getboolean(section, "UseRegEx", fallback=False)
         config[section]["CaseSensitive"] = parser.getboolean(section, "CaseSensitive", fallback=True)
+        config[section]["ChildWindow"] = parser.getboolean(section, "ChildWindow", fallback=False)
         config[section]["OnTop"] = parser.getboolean(section, "CaseSensitive", fallback=False)
         config[section]["PosX0"] = parser.getint(section, "PosX0", fallback=-1)
         config[section]["PosY0"] = parser.getint(section, "PosY0", fallback=-1)
@@ -133,6 +152,7 @@ def write_ini_file(filename, parser):
                 "; useregex = whether or not should be windowtitle handled as regex (boolean)\n"
                 "; ontop = whether or not put everytime window on top (boolean)\n"
                 "; casesensitive = whether or not to ignore case in window title (boolean)\n"
+                "; childwindow = search also child windows for every top-level windows - BEAWARE of performance impact (boolean)\n"
                 "; ==================================================================================================================\n"
                 "\n"]
 
@@ -146,7 +166,7 @@ def find_all_windows(config):
             continue
 
         win_hwnd = get_window_by_name(details["WindowTitle"], is_name_regex=details["UseRegEx"],
-                                      lowercase_only=not details["CaseSensitive"], find_only_one=True)
+                                      lowercase_only=not details["CaseSensitive"], is_child_window=details["ChildWindow"])
         if win_hwnd:
             config[window_record]["HWND"] = win_hwnd
             config[window_record]["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)

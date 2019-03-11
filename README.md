@@ -11,6 +11,7 @@ I got very frustrated by pop-up windows constantly opening on some default posit
 ## Features:
 
 - find desired window by its window title in opened windows (UTF8)
+- find desired child window (non-toplevel window) by its name
 - find current window position every `refreshrateinsec`
 - restore window last position if opened
 - put window on top if `ontop` (very limited)
@@ -22,13 +23,10 @@ I got very frustrated by pop-up windows constantly opening on some default posit
 - put window on top is limited by Microsoft decision to suppress this functionality
 - doesn't work for windows where the window title is changing (i.e. Spotify client shows current track name)
 
-
-
 ## Example INI file:
 
 ```ini
 [DEFAULT]
-caseinsensitive = 1
 refreshrateinsec = 0.5
 saverateinmin = 1
 
@@ -37,6 +35,7 @@ windowtitle = 'Total Commander.+'
 useregex = 1
 ontop = 1
 casesensitive = 0
+childwindow = 0
 ```
 
 This example shows how to capture Total Commander window position even though Total Commander comes with this feature out-of-the box. We specified the name of the window using regular expression since Total Commander window name contains version number with licence information. 
@@ -47,6 +46,7 @@ windowtitle = 'Total Commander.+'
 useregex = 1
 ontop = 1
 casesensitive = 0
+childwindow = 0
 posx0 = 194
 posy0 = 37
 posx1 = 1770
@@ -55,6 +55,6 @@ posy1 = 912
 
 Later when TCMD window is opened, position is retrieved and saved to config file. Next time you open the TCMD, window position gets restored to stored value.
 
-## TODO
+## How to find window name
 
-- support child windows
+If want to find a name of a window you are looking for try enabling `DEBUG_MODE`. Enabling will cause that all listed windows gets printed to console.
