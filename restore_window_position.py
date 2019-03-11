@@ -288,6 +288,9 @@ def restore_window_position_worker(config_sile, stop_event):
         write_ini_parser(cfg_parser, cfg)
         write_ini_file(config_sile, cfg_parser)
 
+    write_ini_parser(cfg_parser, cfg)
+    write_ini_file(config_sile, cfg_parser)
+
     print("")
     print("Restore window position closed")
 
