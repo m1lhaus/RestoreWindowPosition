@@ -55,6 +55,6 @@ posy1 = 912
 
 Later when TCMD window is opened, position is retrieved and saved to config file. Next time you open the TCMD, window position gets restored to stored value.
 
-## How to find window name
+## How to list all found window names?
 
-If want to find a name of a window you are looking for try enabling `DEBUG_MODE`. Enabling will cause that all listed windows gets printed to console.
+If want to find a name of a window you are looking for try enabling `DEBUG_MODE`. Enabling will cause that all listed windows gets printed to console. This list gets printed out every `refreshrateinsec` so you might also want to increase that number for debugging purposes.
