@@ -301,7 +301,7 @@ if __name__ == '__main__':
     args = arg_parser.parse_args()
 
     args.config = os.path.abspath(args.config)
-    if not os.path.join(args.config):
+    if not os.path.isfile(args.config):
         raise Exception("Config file '%s' was not found!" % args.config)
 
     # function is executed in own thread since main loop waits for q-key to be pressed
