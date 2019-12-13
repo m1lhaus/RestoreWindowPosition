@@ -27,6 +27,7 @@ import threading
 import configparser
 import traceback
 from collections import defaultdict
+from operator import sub
 
 import win32gui
 import win32con
@@ -161,53 +162,54 @@ def write_ini_file(filename, parser):
 
 
 def find_all_windows(config):
-    for window_record, details in config.items():
-        if window_record == "DEFAULT":
+    for win_alias, win_properties in config.items():
+        if win_alias == "DEFAULT":
             continue
 
-        win_hwnd = get_window_by_name(details["WindowTitle"], is_name_regex=details["UseRegEx"],
-                                      lowercase_only=not details["CaseSensitive"], is_child_window=details["ChildWindow"])
+        win_hwnd = get_window_by_name(win_properties["WindowTitle"], is_name_regex=win_properties["UseRegEx"],
+                                      lowercase_only=not win_properties["CaseSensitive"], is_child_window=win_properties["ChildWindow"])
         if win_hwnd:
-            config[window_record]["HWND"] = win_hwnd
-            config[window_record]["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
+            win_properties["HWND"] = win_hwnd
+            win_properties["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
 
-            # window is opened, restore its position
-            if not config[window_record]["WindowActive"]:
-                restore_window_position(win_hwnd, config[window_record]["PosX0"], config[window_record]["PosY0"],
-                                        config[window_record]["PosX1"], config[window_record]["PosY1"], config[window_record]["OnTop"])
-
-            config[window_record]["WindowActive"] = True
-
+            # if window is opened and not hidden (transparent), restore its position
+            x0, y0, x1, y1 = win_properties["PosX0"], win_properties["PosY0"], win_properties["PosX1"], win_properties["PosY1"]
+            if not win_properties["WindowActive"] and win32gui.IsWindowEnabled(win_hwnd) and win32gui.IsWindowVisible(win_hwnd) and not is_windows_minimized(x0, y0, x1, y1):
+                try:
+                    restore_window_position(win_hwnd, x0, y0, x1, y1, win_properties["OnTop"])
+                except Exception:
+                    print("Error when restoring window position")
+                win_properties["WindowActive"] = True
         else:
-            config[window_record]["HWND"] = None
-            config[window_record]["RealWindowTitle"] = None
-            config[window_record]["WindowActive"] = False
+            win_properties["HWND"] = None
+            win_properties["RealWindowTitle"] = None
+            win_properties["WindowActive"] = False
 
     return config
 
 
 def update_positions(config):
-    for window_record, details in config.items():
-        if window_record == "DEFAULT":
+    for win_alias, win_properties in config.items():
+        if win_alias == "DEFAULT":
             continue
 
-        win_hwnd = details["HWND"]
-        if win_hwnd is None:
+        # skip processing if window does not exists (no hwnd) or it is not activate (hidden or disabled)
+        if win_properties["HWND"] is None or not win_properties["WindowActive"]:
             continue
 
         try:
-            x0, y0, x1, y1 = win32gui.GetWindowRect(win_hwnd)      # (left, top, right, bottom)
+            x0, y0, x1, y1 = win32gui.GetWindowRect(win_properties["HWND"])      # (left, top, right, bottom)
         except Exception:
-            pass        # might happen whatever
+            pass        # might happen whatever during win32 call
         else:
             is_minimized = is_windows_minimized(x0, y0, x1, y1)
-            details["Minimized"] = is_minimized
+            win_properties["Minimized"] = is_minimized
 
             if not is_minimized:
-                details["PosX0"] = x0
-                details["PosY0"] = y0
-                details["PosX1"] = x1
-                details["PosY1"] = y1
+                win_properties["PosX0"] = x0
+                win_properties["PosY0"] = y0
+                win_properties["PosX1"] = x1
+                win_properties["PosY1"] = y1
 
     return config
 
@@ -225,10 +227,8 @@ def print_summary(config):
         hwnd = win_details["HWND"] if win_details["HWND"] else "N/A"
         is_window_active = win_details["WindowActive"]
         is_minimized = win_details["Minimized"]
-        if win_details["WindowActive"] and not is_minimized:
-            position = "(%d, %d, %d, %d)" % (win_details["PosX0"], win_details["PosY0"], win_details["PosX1"], win_details["PosY1"])
-        else:
-            position = "N/A"
+        na_flag = "N/A " if not win_details["WindowActive"] or is_minimized else ""
+        position = "%s(%d, %d, %d, %d)" % (na_flag, win_details["PosX0"], win_details["PosY0"], win_details["PosX1"], win_details["PosY1"])
 
         print("[%s]" % win_record)
         print("RealWindowTitle =", real_window_title)
@@ -240,19 +240,29 @@ def print_summary(config):
 
 
 def restore_window_position(hwnd, x0, y0, x1, y1, on_top):
-        if on_top:
-            hwnd_insert_after = win32con.HWND_TOPMOST
-            uflags = win32con.SWP_SHOWWINDOW
-        else:
-            hwnd_insert_after = win32con.HWND_TOP
-            uflags = win32con.SWP_NOZORDER
+    if on_top:
+        hwnd_insert_after = win32con.HWND_TOPMOST
+        uflags = win32con.SWP_SHOWWINDOW
+    else:
+        hwnd_insert_after = win32con.HWND_TOP
+        uflags = win32con.SWP_NOZORDER
 
+    print("Restoring window: %s, on top:%s, pos: %s" % (hwnd, on_top, (x0, y0, x1, y1)))
+
+    # I assume there might be race condition when window is opened, displayed and moved - so if we would engage
+    # before it is moved, final position might be set by the app and not by our restore (but that is really a guess)
+    max_num_tries = 10
+    for i in range(max_num_tries):
         width, height = x1 - x0, y1 - y0
+        win32gui.SetWindowPos(hwnd, hwnd_insert_after, x0, y0, width, height, uflags)
+        time.sleep(0.05)
+        x0_new, y0_new, x1_new, y1_new = win32gui.GetWindowRect(hwnd)  # (left, top, right, bottom)
 
-        print("Restoring window: %s, %s" % (hwnd, on_top))
-
-        if not is_windows_minimized(x0, y0, x1, y1):
-            win32gui.SetWindowPos(hwnd, hwnd_insert_after, x0, y0, width, height, uflags)
+        diff = tuple(map(sub, (x0_new, y0_new, x1_new, y1_new), (x0, y0, x1, y1)))      # new - old
+        diff = tuple(map(abs, diff))        # make a diff as abs so we can make a sum
+        diff = sum(diff)        # if position was set, sum should be zero
+        if diff == 0:
+            break
 
 
 def restore_window_position_worker(config_sile, stop_event):
