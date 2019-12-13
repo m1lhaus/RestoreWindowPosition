@@ -193,7 +193,7 @@ def update_positions(config):
 
         win_hwnd = details["HWND"]
         if win_hwnd is None:
-            return config
+            continue
 
         try:
             x0, y0, x1, y1 = win32gui.GetWindowRect(win_hwnd)      # (left, top, right, bottom)
@@ -262,7 +262,7 @@ def restore_window_position_worker(config_sile, stop_event):
     save_rate = cfg["DEFAULT"]["SaveRateInMin"]  # minutes
     save_every = max(int(round((60 * save_rate) / refresh_rate)), 1)  # cycles
 
-    print("Restore window position laucnhed")
+    print("Restore window position launched")
 
     while not stop_event.is_set():
 
