@@ -31,6 +31,7 @@ from operator import sub
 
 import win32gui
 import win32con
+import win32api
 
 
 # if True, all found window names are printed to console and window enumeration wont get interrupted
@@ -173,12 +174,14 @@ def find_all_windows(config):
             win_properties["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
 
             # if window is opened and not hidden (transparent), restore its position
-            x0, y0, x1, y1 = win_properties["PosX0"], win_properties["PosY0"], win_properties["PosX1"], win_properties["PosY1"]
-            if not win_properties["WindowActive"] and win32gui.IsWindowEnabled(win_hwnd) and win32gui.IsWindowVisible(win_hwnd) and not is_windows_minimized(x0, y0, x1, y1):
-                try:
-                    restore_window_position(win_hwnd, x0, y0, x1, y1, win_properties["OnTop"])
-                except Exception:
-                    print("Error when restoring window position")
+            if (not win_properties["WindowActive"] and win32gui.IsWindowEnabled(win_hwnd) and   
+                win32gui.IsWindowVisible(win_hwnd) and not win32gui.IsIconic(win_hwnd)): 
+                x0, y0, x1, y1 = win_properties["PosX0"], win_properties["PosY0"], win_properties["PosX1"], win_properties["PosY1"]
+                if is_position_valid(x0, y0, x1, y1):
+                    try:
+                        restore_window_position(win_hwnd, x0, y0, x1, y1, win_properties["OnTop"])
+                    except Exception:
+                        print("Error when restoring window position")
                 win_properties["WindowActive"] = True
         else:
             win_properties["HWND"] = None
@@ -202,10 +205,8 @@ def update_positions(config):
         except Exception:
             pass        # might happen whatever during win32 call
         else:
-            is_minimized = is_windows_minimized(x0, y0, x1, y1)
-            win_properties["Minimized"] = is_minimized
-
-            if not is_minimized:
+            win_properties["Minimized"] = win32gui.IsIconic(win_properties["HWND"])
+            if not win_properties["Minimized"] and is_position_valid(x0, y0, x1, y1):
                 win_properties["PosX0"] = x0
                 win_properties["PosY0"] = y0
                 win_properties["PosX1"] = x1
@@ -214,8 +215,16 @@ def update_positions(config):
     return config
 
 
-def is_windows_minimized(x0, y0, x1, y1):
-    return (x0 < 0) and (y0 < 0) and (x1 < 0) and (y1 < 0)
+def is_position_valid(x0, y0, x1, y1):
+    # Get the total virtual screen dimensions  
+    virtual_screen_left = win32api.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN  
+    virtual_screen_top = win32api.GetSystemMetrics(77)   # SM_YVIRTUALSCREEN  
+    virtual_screen_width = win32api.GetSystemMetrics(78) # SM_CXVIRTUALSCREEN  
+    virtual_screen_height = win32api.GetSystemMetrics(79) # SM_CYVIRTUALSCREEN  
+    x0_min, y0_min = virtual_screen_left, virtual_screen_top
+    x1_max, y1_max = virtual_screen_left + virtual_screen_width, virtual_screen_top + virtual_screen_height
+    is_valid = (x0 >= x0_min) and (y0 >= y0_min) and (x1 <= x1_max) and (y1 <= y1_max)
+    return is_valid
 
 
 def print_summary(config):
