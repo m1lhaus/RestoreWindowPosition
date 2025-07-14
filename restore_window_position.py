@@ -48,7 +48,7 @@ def get_window_by_name(target_name, is_name_regex, lowercase_only, is_child_wind
         if lowercase_only:
             target_wname = target_wname.lower()
             current_wname = current_wname.lower()
-        return (is_name_regex and re.match(target_wname, current_wname)) or (target_wname in current_wname)
+        return (is_name_regex and re.match(target_wname, current_wname)) or (target_wname == current_wname)
 
     def enum_child_windows_callback(i_hwnd, _):
         nonlocal found_window_hwnd, target_name, is_name_regex, lowercase_only
@@ -170,12 +170,13 @@ def find_all_windows(config):
         win_hwnd = get_window_by_name(win_properties["WindowTitle"], is_name_regex=win_properties["UseRegEx"],
                                       lowercase_only=not win_properties["CaseSensitive"], is_child_window=win_properties["ChildWindow"])
         if win_hwnd:
+            if win_hwnd != win_properties.get("HWND", -1):
+                win_properties["WindowActive"] = False      # we need to detect case the window reopens between two calls
             win_properties["HWND"] = win_hwnd
             win_properties["RealWindowTitle"] = win32gui.GetWindowText(win_hwnd)
 
             # if window is opened and not hidden (transparent), restore its position
-            if (not win_properties["WindowActive"] and win32gui.IsWindowEnabled(win_hwnd) and   
-                win32gui.IsWindowVisible(win_hwnd) and not win32gui.IsIconic(win_hwnd)): 
+            if (not win_properties["WindowActive"] and win32gui.IsWindowEnabled(win_hwnd) and not win32gui.IsIconic(win_hwnd)): 
                 x0, y0, x1, y1 = win_properties["PosX0"], win_properties["PosY0"], win_properties["PosX1"], win_properties["PosY1"]
                 if is_position_valid(x0, y0, x1, y1):
                     try:
@@ -280,6 +281,7 @@ def restore_window_position_worker(config_sile, stop_event):
     refresh_rate = cfg["DEFAULT"]["RefreshRateInSec"]  # seconds
     save_rate = cfg["DEFAULT"]["SaveRateInMin"]  # minutes
     save_every = max(int(round((60 * save_rate) / refresh_rate)), 1)  # cycles
+    last_summary = time.time()
 
     print("Restore window position launched")
 
@@ -293,13 +295,15 @@ def restore_window_position_worker(config_sile, stop_event):
             cfg = find_all_windows(cfg)
             cfg = update_positions(cfg)
 
-            print("Restore window position is running...")
-            print("")
-            print_summary(cfg)
-            print("")
-            print("Press 'q' key to exit")
-            print("--> ", end="")
-            sys.stdout.flush()
+            if time.time() - last_summary > 0.5:
+                print("Restore window position is running...")
+                print("")
+                print_summary(cfg)
+                print("")
+                print("Press 'q' key to exit")
+                print("--> ", end="")
+                sys.stdout.flush()
+                last_summary = time.time()
 
             time.sleep(refresh_rate)
 
